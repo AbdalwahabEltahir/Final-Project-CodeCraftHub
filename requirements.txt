@@ -1,0 +1,157 @@
+Here's the complete Flask application code with all the requirements:
+
+python
+
+from flask import Flask, jsonify, request
+import json
+import os
+from datetime import datetime
+
+app = Flask(__name__)
+
+# Configuration
+DATA_FILE = 'courses.json'
+
+# Helper function to load courses from JSON file
+def load_courses():
+    if not os.path.exists(DATA_FILE):
+        with open(DATA_FILE, 'w') as f:
+            json.dump([], f)
+        return []
+    
+    try:
+        with open(DATA_FILE, 'r') as f:
+            return json.load(f)
+    except json.JSONDecodeError:
+        return []
+
+# Helper function to save courses to JSON file
+def save_courses(courses):
+    try:
+        with open(DATA_FILE, 'w') as f:
+            json.dump(courses, f, indent=2)
+        return True
+    except Exception as e:
+        return False
+
+# Get next available ID
+def get_next_id(courses):
+    if not courses:
+        return 1
+    return max(course['id'] for course in courses) + 1
+
+# GET all courses
+@app.route('/api/courses', methods=['GET'])
+def get_all_courses():
+    courses = load_courses()
+    return jsonify({
+        'success': True,
+        'count': len(courses),
+        'courses': courses
+    }), 200
+
+# GET specific course
+@app.route('/api/courses/<int:course_id>', methods=['GET'])
+def get_course(course_id):
+    courses = load_courses()
+    course = next((c for c in courses if c['id'] == course_id), None)
+    
+    if course:
+        return jsonify({'success': True, 'course': course}), 200
+    return jsonify({'success': False, 'error': 'Course not found'}), 404
+
+# POST new course
+@app.route('/api/courses', methods=['POST'])
+def add_course():
+    data = request.get_json()
+    
+    # Validate required fields
+    required_fields = ['name', 'description', 'target_date', 'status']
+    for field in required_fields:
+        if field not in data:
+            return jsonify({
+                'success': False,
+                'error': f'Missing required field: {field}'
+            }), 400
+    
+    # Validate status
+    valid_statuses = ['Not Started', 'In Progress', 'Completed']
+    if data['status'] not in valid_statuses:
+        return jsonify({
+            'success': False,
+            'error': f'Status must be one of: {", ".join(valid_statuses)}'
+        }), 400
+    
+    courses = load_courses()
+    
+    new_course = {
+        'id': get_next_id(courses),
+        'name': data['name'],
+        'description': data['description'],
+        'target_date': data['target_date'],
+        'status': data['status'],
+        'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    }
+    
+    courses.append(new_course)
+    save_courses(courses)
+    
+    return jsonify({
+        'success': True,
+        'message': 'Course added successfully',
+        'course': new_course
+    }), 201
+
+# PUT update course
+@app.route('/api/courses/<int:course_id>', methods=['PUT'])
+def update_course(course_id):
+    data = request.get_json()
+    courses = load_courses()
+    
+    course_index = next((i for i, c in enumerate(courses) if c['id'] == course_id), None)
+    
+    if course_index is None:
+        return jsonify({'success': False, 'error': 'Course not found'}), 404
+    
+    # Update fields if provided
+    course = courses[course_index]
+    if 'name' in data:
+        course['name'] = data['name']
+    if 'description' in data:
+        course['description'] = data['description']
+    if 'target_date' in data:
+        course['target_date'] = data['target_date']
+    if 'status' in data:
+        course['status'] = data['status']
+    
+    save_courses(courses)
+    
+    return jsonify({
+        'success': True,
+        'message': 'Course updated successfully',
+        'course': course
+    }), 200
+
+# DELETE course
+@app.route('/api/courses/<int:course_id>', methods=['DELETE'])
+def delete_course(course_id):
+    courses = load_courses()
+    course_index = next((i for i, c in enumerate(courses) if c['id'] == course_id), None)
+    
+    if course_index is None:
+        return jsonify({'success': False, 'error': 'Course not found'}), 404
+    
+    deleted_course = courses.pop(course_index)
+    save_courses(courses)
+    
+    return jsonify({
+        'success': True,
+        'message': 'Course deleted successfully',
+        'deleted_course': deleted_course
+    }), 200
+
+if __name__ == '__main__':
+    print("CodeCraftHub API is starting...")
+    print(f"Data will be stored in: {os.path.abspath(DATA_FILE)}")
+    print("API will be available at: http://localhost:5000")
+    app.run(debug=True, host='0.0.0.0', port=5000)
